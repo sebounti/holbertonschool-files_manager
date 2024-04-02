@@ -1,5 +1,5 @@
-const redis = require("redis");
-const { promisify } = require("util");
+const redis = require('redis');
+const { promisify } = require('util');
 
 class RedisClient {
   constructor() {
@@ -11,7 +11,7 @@ class RedisClient {
     this.delAsync = promisify(this.client.del).bind(this.client);
 
     // gestion des erreurs
-    this.client.on("error", (ERROR) => {
+    this.client.on('error', (ERROR) => {
       console.error(`error redis client: ${ERROR}`);
     });
   }
@@ -27,7 +27,7 @@ class RedisClient {
 
   // stoke valeur et expiration
   async set(key, value, duration) {
-    return this.setAsync(key, value, "EX", duration);
+    return this.setAsync(key, value, 'EX', duration);
   }
 
   // supprime la cle
