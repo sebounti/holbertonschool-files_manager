@@ -2,7 +2,7 @@ import express from 'express';
 import controllerRouting from './routes/index';
 
 const app = express();
-const port = process.env.Port || 5050;
+const port = process.env.Port || 5000;
 
 app.use(express.json());
 
