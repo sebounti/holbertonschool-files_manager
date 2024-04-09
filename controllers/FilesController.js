@@ -1,95 +1,91 @@
 import fs from 'fs';
-import path from 'path';
+import Bull from 'bull';
+import { ObjectId } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
 import dbClient from '../utils/db';
+import redisClient from '../utils/redis';
 
-const { ObjectId } = require('mongodb');
+const fileQueue = new Bull('fileQueue');
 
 class FilesController {
   static async postUpload(request, response) {
-    const { name, type, parentId, isPublic, data } = request.body;
     // Vérification de la présence du token dans l'en-tête de la requête
     const token = request.header('X-Token');
-    if (!token) {
+    const userId = await redisClient.get(`auth_${token}`);
+
+    if (!userId) {
       return response.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Récupération de l'utilisateur basé sur le token
-    const user = await dbClient.db.collection('users').findOne({ token });
-    if (!user) {
-      return response.status(401).json({ error: 'Unauthorized' });
-    }
+    const { name, type, parentId = 0, isPublic = false, data } = request.body;
 
-    // Vérification de la présence du nom du fichier
     if (!name) {
       return response.status(400).json({ error: 'Missing name' });
     }
 
-    // Vérification de la présence et de la validité du type de fichier
-    if (!type || !['folder', 'file', 'image'].includes(type)) {
-      return response.status(400).json({ error: 'Missing or invalid type' });
+    const allowedTypes = ['folder', 'file', 'image'];
+    if (!type || !allowedTypes.includes(type)) {
+      return response.status(400).json({ error: 'Missing type' });
     }
 
-    // Vérification de la présence des données si le type n'est pas un dossier
-    if (type !== 'folder' && !data) {
+    if (!data && type !== 'folder') {
       return response.status(400).json({ error: 'Missing data' });
     }
 
-    // Vérification du parent s'il est défini
-    if (parentId) {
-      const parentFile = await dbClient.db
+    if (parentId !== 0) {
+      const project = new ObjectId(parentId);
+      const file = await dbClient.db
         .collection('files')
-        .findOne({ _id: ObjectId(parentId) });
-      if (!parentFile) {
+        .findOne({ _id: project });
+      if (!file) {
         return response.status(400).json({ error: 'Parent not found' });
       }
-      if (parentFile.type !== 'folder') {
+
+      if (file.type !== 'folder') {
         return response.status(400).json({ error: 'Parent is not a folder' });
       }
     }
 
-    // Crée le chemin de stockage des fichiers
-    const storingFolder = process.env.FOLDER_PATH || '/tmp/files_manager';
-
-    // Génére d'un identifiant unique pour le fichier
-    const fileUuid = uuidv4();
-
-    // Chemin  du fichier sur le disque
-    const filePath = path.join(storingFolder, fileUuid);
-
-    // Si le type est un dossier, enregistrement uniquement dans database
+    let newFile;
     if (type === 'folder') {
-      const newFile = await dbClient.db.collection('files').insertOne({
-        userId: user._id,
+      newFile = await dbClient.db.collection('files').insertOne({
+        userId: new ObjectId(userId),
         name,
         type,
-        isPublic: isPublic || false,
-        parentId: parentId || 0,
+        isPublic,
+        parentId,
+      });
+    } else {
+      const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath);
+      }
+
+      const localPath = `${folderPath}/${uuidv4()}`;
+      const buff = Buffer.from(request.body.data, 'base64');
+      await fs.promises.writeFile(localPath, buff);
+      newFile = await dbClient.db.collection('files').insertOne({
+        userId: new ObjectId(userId),
+        name,
+        type,
+        isPublic,
+        parentId,
+        localPath,
       });
 
-      return response.status(201).json(newFile.ops[0]);
+      if (type === 'image') {
+        fileQueue.add({ userId, fileId: newFile.insertedId });
+      }
     }
 
-    // Si le type est un fichier, enregistre le fichier sur disque et db
-    const fileBuffer = Buffer.from(data, 'base64');
-
-    // Création du dossier de stockage s'il n'existe pas
-    fs.mkdirSync(storingFolder, { recursive: true });
-
-    // Écriture du contenu du fichier sur le disque
-    fs.writeFileSync(filePath, fileBuffer);
-
-    // Enregistrement du fichier dans la base de données
-    const newFile = await dbClient.db.collection('files').insertOne({
-      userId: user._id,
+    return response.status(201).send({
+      id: newFile.insertedId,
+      userId,
       name,
       type,
-      isPublic: isPublic || false,
-      parentId: parentId || 0,
-      localPath: filePath,
+      isPublic,
+      parentId,
     });
-
-    return response.status(201).json(newFile.ops[0]);
   }
 }
 
