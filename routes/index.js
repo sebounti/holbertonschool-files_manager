@@ -16,22 +16,9 @@ function controllerRouting(app) {
     AppController.getStats(req, res);
   });
 
-  // controler  user
+  // controler user
   router.post('/users', (req, res) => {
     UsersController.postNew(req, res);
-  });
-
-  //
-  router.get('/connect', (req, res) => {
-    AuthController.getConnect(req, res);
-  });
-
-  router.get('/disconnect', (req, res) => {
-    AuthController.getDisconnect(req, res);
-  });
-
-  router.get('/users/me', (req, res) => {
-    AuthController.getMe(req, res);
   });
 }
 
