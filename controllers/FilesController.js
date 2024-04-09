@@ -6,9 +6,8 @@ import dbClient from '../utils/db';
 const { ObjectId } = require('mongodb');
 
 class FilesController {
-  static async postFiles(request, response) {
+  static async postUpload(request, response) {
     const { name, type, parentId, isPublic, data } = request.body;
-
     // Vérification de la présence du token dans l'en-tête de la requête
     const token = request.header('X-Token');
     if (!token) {
