@@ -1,20 +1,17 @@
-import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import dbClient from '../utils/db';
 
-const FOLDER_PATH = process.env.FOLDER_PATH || '/tmp/files_manager';
-
 class FilesController {
   static async postUpload(req, res) {
-    const { name, type, data, parentId, isPublic } = req.body;
-    const token = req.headers['x-token'];
+    const { name, type, parentId = 0, isPublic = false, data } = req.body;
+    const { 'x-token': token } = req.headers;
 
     if (!token) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const userId = await FilesController.getUserIdByToken(token);
+    const userId = await AuthController.getUserIdByToken(token);
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -23,57 +20,48 @@ class FilesController {
       return res.status(400).json({ error: 'Missing name' });
     }
 
-    if (!type || !['folder', 'file', 'image'].includes(type)) {
-      return res.status(400).json({ error: 'Missing or invalid type' });
+    if (!['folder', 'file', 'image'].includes(type)) {
+      return res.status(400).json({ error: 'Missing type' });
     }
 
-    if (type !== 'folder' && !data) {
+    if (['file', 'image'].includes(type) && !data) {
       return res.status(400).json({ error: 'Missing data' });
     }
 
-    if (parentId) {
-      const parentFile = await dbClient.db.collection('files').findOne({ _id: dbClient.getObjectId(parentId) });
-      if (!parentFile) {
-        return res.status(400).json({ error: 'Parent not found' });
-      }
-
-      if (parentFile.type !== 'folder') {
-        return res.status(400).json({ error: 'Parent is not a folder' });
+    if (parentId !== 0) {
+      const parentFile = await dbClient.getFile(parentId);
+      if (!parentFile || parentFile.type !== 'folder') {
+        return res.status(400).json({ error: 'Parent not found or is not a folder' });
       }
     }
 
-    const fileDocument = {
+    let localPath;
+    if (['file', 'image'].includes(type)) {
+      const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
+      localPath = path.join(folderPath, `${uuidv4()}`);
+      const fileData = Buffer.from(data, 'base64');
+      fs.writeFileSync(localPath, fileData);
+    }
+
+    const newFile = {
       userId,
       name,
       type,
-      isPublic: isPublic || false,
-      parentId: parentId || '0',
+      parentId,
+      isPublic,
+      localPath: type === 'file' || type === 'image' ? localPath : undefined,
     };
 
-    if (type === 'folder') {
-      const result = await dbClient.db.collection('files').insertOne(fileDocument);
-      const insertedFile = { ...fileDocument, id: result.insertedId };
+    const fileId = await dbClient.createFile(newFile);
 
-      return res.status(201).json(insertedFile);
-    }
-
-    const fileData = Buffer.from(data, 'base64');
-    const filePath = path.join(FOLDER_PATH, uuidv4());
-
-    fs.writeFileSync(filePath, fileData);
-
-    const result = await dbClient.db.collection('files').insertOne({
-      ...fileDocument,
-      localPath: filePath,
+    return res.status(201).json({
+      id: fileId,
+      userId,
+      name,
+      type,
+      isPublic,
+      parentId,
     });
-    const insertedFile = { ...fileDocument, id: result.insertedId };
-
-    return res.status(201).json(insertedFile);
-  }
-
-  static async getUserIdByToken(token) {
-
-    return null;
   }
 }
 
