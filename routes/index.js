@@ -2,13 +2,14 @@ import express from 'express';
 import AppController from '../controllers/AppController';
 import UsersController from '../controllers/UsersController';
 import AuthController from '../controllers/AuthController';
-import FilesController from '../controllers/FilesController'; // Import the FilesController
+import FilesController from '../controllers/FilesController';
 
 function controllerRouting(app) {
   const router = express.Router();
   app.use('/', router);
 
-  // controler App
+  // Existing endpoints
+
   router.get('/status', (req, res) => {
     AppController.getStatus(req, res);
   });
@@ -17,12 +18,10 @@ function controllerRouting(app) {
     AppController.getStats(req, res);
   });
 
-  // controler user
   router.post('/users', (req, res) => {
     UsersController.postNew(req, res);
   });
 
-  // New endpoints
   router.get('/connect', (req, res) => {
     AuthController.getConnect(req, res);
   });
@@ -35,9 +34,17 @@ function controllerRouting(app) {
     UsersController.getMe(req, res);
   });
 
-  // Add the new endpoint for file upload
   router.post('/files', (req, res) => {
     FilesController.postUpload(req, res);
+  });
+
+  // New endpoints
+  router.get('/files/:id', (req, res) => {
+    FilesController.getShow(req, res);
+  });
+
+  router.get('/files', (req, res) => {
+    FilesController.getIndex(req, res);
   });
 }
 

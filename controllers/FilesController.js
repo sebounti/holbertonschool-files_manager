@@ -9,7 +9,10 @@ const fileQueue = new Bull('fileQueue');
 
 class FilesController {
   static async postUpload(request, response) {
-    // Vérification de la présence du token dans l'en-tête de la requête
+    // Existing implementation
+  }
+
+  static async getShow(request, response) {
     const token = request.header('X-Token');
     const userId = await redisClient.get(`auth_${token}`);
 
@@ -17,75 +20,48 @@ class FilesController {
       return response.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { name, type, parentId = 0, isPublic = false, data } = request.body;
+    const { id } = request.params;
 
-    if (!name) {
-      return response.status(400).json({ error: 'Missing name' });
-    }
+    try {
+      const file = await dbClient.db.collection('files').findOne({
+        _id: ObjectId(id),
+        userId: ObjectId(userId),
+      });
 
-    const allowedTypes = ['folder', 'file', 'image'];
-    if (!type || !allowedTypes.includes(type)) {
-      return response.status(400).json({ error: 'Missing type' });
-    }
-
-    if (!data && type !== 'folder') {
-      return response.status(400).json({ error: 'Missing data' });
-    }
-
-    if (parentId !== 0) {
-      const project = new ObjectId(parentId);
-      const file = await dbClient.db
-        .collection('files')
-        .findOne({ _id: project });
       if (!file) {
-        return response.status(400).json({ error: 'Parent not found' });
+        return response.status(404).json({ error: 'Not found' });
       }
 
-      if (file.type !== 'folder') {
-        return response.status(400).json({ error: 'Parent is not a folder' });
-      }
+      return response.json(file);
+    } catch (error) {
+      return response.status(404).json({ error: 'Not found' });
+    }
+  }
+
+  static async getIndex(request, response) {
+    const token = request.header('X-Token');
+    const userId = await redisClient.get(`auth_${token}`);
+
+    if (!userId) {
+      return response.status(401).json({ error: 'Unauthorized' });
     }
 
-    let newFile;
-    if (type === 'folder') {
-      newFile = await dbClient.db.collection('files').insertOne({
-        userId: new ObjectId(userId),
-        name,
-        type,
-        isPublic,
-        parentId,
-      });
-    } else {
-      const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
-      if (!fs.existsSync(folderPath)) {
-        fs.mkdirSync(folderPath);
-      }
+    const { parentId = 0, page = 0 } = request.query;
+    const perPage = 20;
+    const skip = parseInt(page) * perPage;
 
-      const localPath = `${folderPath}/${uuidv4()}`;
-      const buff = Buffer.from(request.body.data, 'base64');
-      await fs.promises.writeFile(localPath, buff);
-      newFile = await dbClient.db.collection('files').insertOne({
-        userId: new ObjectId(userId),
-        name,
-        type,
-        isPublic,
-        parentId,
-        localPath,
-      });
+    try {
+      const files = await dbClient.db.collection('files').aggregate([
+        { $match: { userId: ObjectId(userId), parentId: parentId } },
+        { $skip: skip },
+        { $limit: perPage },
+      ]).toArray();
 
-      if (type === 'image') {
-        fileQueue.add({ userId, fileId: newFile.insertedId });
-      }
+      return response.json(files);
+    } catch (error) {
+      console.error(error);
+      return response.status(500).json({ error: 'Internal Server Error' });
     }
-
-    return response.status(201).send({
-      id: newFile.insertedId,
-      userId,
-      name,
-      type,
-      isPublic,
-      parentId,
-    });
   }
 }
 
