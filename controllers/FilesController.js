@@ -1,26 +1,21 @@
-import fs from 'fs';
-import Bull from 'bull';
 import { ObjectId } from 'mongodb';
-import { v4 as uuidv4 } from 'uuid';
 import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
 
-const fileQueue = new Bull('fileQueue');
-
 class FilesController {
   static async postUpload(request, response) {
-    // Existing implementation
+    // Your existing implementation
   }
 
-  static async getShow(request, response) {
-    const token = request.header('X-Token');
+  static async getShow(req, res) {
+    const token = req.header('X-Token');
     const userId = await redisClient.get(`auth_${token}`);
 
     if (!userId) {
-      return response.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { id } = request.params;
+    const { id } = req.params;
 
     try {
       const file = await dbClient.db.collection('files').findOne({
@@ -29,26 +24,27 @@ class FilesController {
       });
 
       if (!file) {
-        return response.status(404).json({ error: 'Not found' });
+        return res.status(404).json({ error: 'Not found' });
       }
 
-      return response.json(file);
+      return res.json(file);
     } catch (error) {
-      return response.status(404).json({ error: 'Not found' });
+      console.error(error);
+      return res.status(404).json({ error: 'Not found' });
     }
   }
 
-  static async getIndex(request, response) {
-    const token = request.header('X-Token');
+  static async getIndex(req, res) {
+    const token = req.header('X-Token');
     const userId = await redisClient.get(`auth_${token}`);
 
     if (!userId) {
-      return response.status(401).json({ error: 'Unauthorized' });
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { parentId = 0, page = 0 } = request.query;
+    const { parentId = 0, page = 0 } = req.query;
     const perPage = 20;
-    const skip = parseInt(page) * perPage;
+    const skip = parseInt(page, 10) * perPage; // Add radix parameter
 
     try {
       const files = await dbClient.db.collection('files').aggregate([
@@ -57,10 +53,10 @@ class FilesController {
         { $limit: perPage },
       ]).toArray();
 
-      return response.json(files);
+      return res.json(files);
     } catch (error) {
       console.error(error);
-      return response.status(500).json({ error: 'Internal Server Error' });
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
   }
 }
