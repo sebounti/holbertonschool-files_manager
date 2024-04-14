@@ -2,7 +2,7 @@ import express from 'express';
 import AppController from '../controllers/AppController';
 import UsersController from '../controllers/UsersController';
 import AuthController from '../controllers/AuthController';
-import FilesController from '../controllers/FilesController';
+import FilesController from '../controllers/FilesController'; // Import FilesController
 
 function controllerRouting(app) {
   const router = express.Router();
@@ -46,13 +46,17 @@ function controllerRouting(app) {
     FilesController.getIndex(req, res);
   });
 
-  // New endpoints
   router.put('/files/:id/publish', (req, res) => {
     FilesController.putPublish(req, res);
   });
 
   router.put('/files/:id/unpublish', (req, res) => {
     FilesController.putUnpublish(req, res);
+  });
+
+  // New endpoint for Task 8
+  router.get('/files/:id/data', (req, res) => {
+    FilesController.getFileData(req, res);
   });
 
   return router;
