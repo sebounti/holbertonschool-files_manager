@@ -46,6 +46,8 @@ function controllerRouting(app) {
   router.get('/files', (req, res) => {
     FilesController.getIndex(req, res);
   });
+
+  return router;
 }
 
 export default controllerRouting;

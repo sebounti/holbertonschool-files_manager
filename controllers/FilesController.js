@@ -1,4 +1,4 @@
-import { ObjectId } from 'mongodb'; // Keep this import if it's needed for ObjectId
+import { ObjectId } from 'mongodb';
 import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
 
