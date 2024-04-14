@@ -1,13 +1,12 @@
 import sha1 from 'sha1';
 import { v4 as uuidv4 } from 'uuid';
-import DBClient from '../utils/db';
 import RedisClient from '../utils/redis';
+import DBClient from '../utils/db';
 
 class AuthController {
   static async getConnect(request, response) {
     const authorization = request.header('Authorization') || null;
-    if (!authorization)
-      return response.status(401).send({ error: 'Unauthorized' });
+    if (!authorization) return response.status(401).send({ error: 'Unauthorized' });
 
     const buff = Buffer.from(authorization.replace('Basic ', ''), 'base64');
     const credentials = {
@@ -28,7 +27,7 @@ class AuthController {
 
     const token = uuidv4();
     const key = `auth_${token}`;
-    await RedisClient.set(key, userExists._id.toString(), 86400);
+    await RedisClient.set(key, userExists._id.toString(), 'EX', 86400);
 
     return response.status(200).send({ token });
   }
@@ -38,12 +37,11 @@ class AuthController {
     if (!token) return response.status(401).send({ error: 'Unauthorized' });
 
     const redisToken = await RedisClient.get(`auth_${token}`);
-    if (!redisToken)
-      return response.status(401).send({ error: 'Unauthorized' });
+    if (!redisToken) return response.status(401).send({ error: 'Unauthorized' });
 
     await RedisClient.del(`auth_${token}`);
     return response.status(204).send();
   }
 }
 
-module.exports = AuthController;
+export default AuthController;
